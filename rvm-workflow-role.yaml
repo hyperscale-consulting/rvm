@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: |
+  Role Vending Machine workflow roles that get deployed to each RVM managed account.
+
+Parameters:
+  RvmAccount:
+    Type: String
+    Description: The ID of the RVM account
+
+Resources:
+  RvmWorkflowRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: RvmWorkflowRole
+      Description: |
+        The role assumed by the RVM Main Role from the RVM account to vend new roles
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${RvmAccount}:role/RvmMainRole"
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: AllowCreateRole
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:AttachRolePolicy
+                  - iam:CreatePolicy
+                  - iam:DeleteRole
+                  - iam:DeletePolicy
+                  - iam:DetachRolePolicy
+                  - iam:GetPolicy
+                  - iam:GetPolicyVersion
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListRoles
+                  - iam:ListPolicies
+                  - iam:UpdateRole
+                  - iam:PutRolePolicy
+                  - iam:SetDefaultPolicyVersion
+                Resource: "*"
+        - PolicyName: AllowManageRvmStacks
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DeleteStack
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/rvm-provisioned-*"
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:ListStacks
+                  - cloudformation:GetTemplateSummary
+                Resource: "*"

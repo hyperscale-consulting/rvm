@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rvm"
+version = "0.1.0"
+description = "AWS Role Vending Machine"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [
+    { name = "Andy Caine", email = "andy@hyperscale.consulting" },
+    { name = "Henry Addico", email = "henry@hyperscale.consulting" }
+]
+urls = { repository = "https://github.com/hyperscale-consulting/rvm" }
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "boto3",
+  "pytest",
+  "moto[cloudformation,s3]",
+]
+

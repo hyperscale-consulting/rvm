@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Role Vending Machine
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Description: |
+      The Github repo that can deploy RVM configuration, e.g. hyperscale-consulting/rvm-configuration
+  GitHubOidcProviderArn:
+    Type: String
+    Description: OIDC provider ARN for CI/CD OIDC provider
+
+Resources:
+  RvmPipelineBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: "s3:ObjectCreated:*"
+            Function: !Ref RvmLambdaFunction
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .zip
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: RvmMainRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RVMLambdaPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Sub "arn:${AWS::Partition}:iam::*:role/RvmWorkflowRole"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/rvm:*"
+
+  RvmLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: rvm.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 900
+      MemorySize: 512
+      Code: ./rvm
+      Architectures:
+        - arm64
+      LoggingConfig:
+        LogGroup: !Ref LambdaLogGroup
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: INFO
+
+  RvmPipelineBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref RvmPipelineBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnforceSecureTransit
+            Effect: Deny
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+            Action: s3:*
+            Resource: !Sub "${RvmPipelineBucket.Arn}/*"
+            Principal: "*"
+          - Sid: AllowLambdaRead
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt LambdaExecutionRole.Arn
+            Action: s3:GetObject
+            Resource: !Sub "${RvmPipelineBucket.Arn}/rvm-configuration.zip"
+
+  # Lambda Permission for S3 to invoke Lambda
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RvmLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub "${RvmPipelineBucket}/rvm-configuration.zip"
+
+  RvmCiCdRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: RvmCiCdRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRoleWithWebIdentity
+            Principal:
+              Federated: !Ref GitHubOidcProviderArn
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+                "token.actions.githubusercontent.com:sub": !Sub "repo:${GitHubRepo}"
+      Policies:
+        - PolicyName: RvmCiCdPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub "${RvmPipelineBucket}/rvm-configuration.zip"
+
+  # CloudWatch Log Group for Lambda
+  LambdaLogGroup:
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: "/aws/lambda/rvm"
+      RetentionInDays: 7
+
+Outputs:
+  RvmPipelineBucket:
+    Description: Name of the S3 bucket for RVM pipeline packages
+    Value: !Ref RvmPipelineBucket
