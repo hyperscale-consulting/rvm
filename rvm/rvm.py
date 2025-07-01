@@ -7,6 +7,7 @@ import json
 
 logger = logging.getLogger(__name__)
 STACK_PREFIX = "rvm-provisioned"
+REGION = os.environ["AWS_REGION"]
 
 
 def _download_and_extract_zip(bucket: str, key: str) -> str:
@@ -61,7 +62,7 @@ def _read_template_file(template_file: str) -> str:
 
 def _get_existing_stacks(session: boto3.Session) -> dict[str, str]:
     """Get all existing RVM-managed stacks in the account with their status."""
-    cloudformation = session.client("cloudformation")
+    cloudformation = session.client("cloudformation", region_name=REGION)
     existing_stacks = {}
 
     try:
@@ -80,7 +81,7 @@ def _get_existing_stacks(session: boto3.Session) -> dict[str, str]:
 
 def _delete_stack(session: boto3.Session, stack_name: str, account_id: str) -> bool:
     """Delete a CloudFormation stack and wait for completion."""
-    cloudformation = session.client("cloudformation")
+    cloudformation = session.client("cloudformation", region_name=REGION)
 
     try:
         cloudformation.delete_stack(StackName=stack_name)
@@ -108,7 +109,7 @@ def _deploy_stack(
     account_id: str,
     existing_stacks: dict[str, str],
 ) -> bool:
-    cloudformation = session.client("cloudformation")
+    cloudformation = session.client("cloudformation", region_name=REGION)
 
     # Check if stack exists in our tracked stacks
     if stack_name in existing_stacks:
