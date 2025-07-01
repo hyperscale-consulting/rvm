@@ -12,7 +12,9 @@ CONFIG_FILE = "rvm-configuration.zip"
 
 
 @moto.mock_aws
-def test_create_stack():
+def test_create_stack(monkeypatch):
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+
     s3 = boto3.resource("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=PIPELINE_BUCKET)
     pipeline_bucket = s3.Bucket(PIPELINE_BUCKET)
