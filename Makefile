@@ -25,5 +25,8 @@ tag: test
 release: tag
 	git push origin v$(VERSION)
 
-test: rvm/rvm.py tests/test_rvm.py
+test: rvm/rvm.py tests/test_rvm.py template.yaml rvm-workflow-role.yaml
 	pytest
+	cfn-lint --ignore-checks W3002 -- template.yaml
+	cfn-lint rvm-workflow-role.yaml
+	cfn_nag template.yaml rvm-workflow-role.yaml

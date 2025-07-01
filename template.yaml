@@ -9,6 +9,9 @@ Parameters:
   GitHubOidcProviderArn:
     Type: String
     Description: OIDC provider ARN for CI/CD OIDC provider
+  RvmPiplineBucketAccessLogBucket:
+    Type: String
+    Description: Access log bucket for the RVM pipeline bucket
 
 Resources:
   RvmPipelineBucket:
@@ -25,6 +28,8 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      LoggingConfiguration:
+        DestinationBucketName: !Ref RvmPiplineBucketAccessLogBucket
       NotificationConfiguration:
         LambdaConfigurations:
           - Event: "s3:ObjectCreated:*"
@@ -37,6 +42,11 @@ Resources:
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: Static role name so it can be easily referred to in the RVM workflow role policy
     Properties:
       RoleName: RvmMainRole
       AssumeRolePolicyDocument:
@@ -46,6 +56,8 @@ Resources:
             Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       Policies:
         - PolicyName: RVMLambdaPolicy
           PolicyDocument:
@@ -54,24 +66,21 @@ Resources:
               - Effect: Allow
                 Action: sts:AssumeRole
                 Resource: !Sub "arn:${AWS::Partition}:iam::*:role/RvmWorkflowRole"
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*"
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/rvm:*"
 
   RvmLambdaFunction:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: No need for VPC access
     Properties:
       Runtime: python3.12
       Handler: rvm.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 900
       MemorySize: 512
+      ReservedConcurrentExecutions: 1
       Code: ./rvm
       Architectures:
         - arm64
@@ -115,7 +124,6 @@ Resources:
   RvmCiCdRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: RvmCiCdRole
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -137,7 +145,37 @@ Resources:
                   - s3:PutObject
                 Resource: !Sub "${RvmPipelineBucket}/rvm-configuration.zip"
 
-  # CloudWatch Log Group for Lambda
+  LogGroupKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      Description: Encrypts the RVM lambda logs
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          # The following statement is required for KMS key policies to enable IAM policies
+          # set in the owning account to be effective. Without this, admin permissions would
+          # need to be explicitly set here or the key would become unmanageable
+          - Sid: "Enable IAM User Permissions"
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action:
+              - kms:*
+            Resource: "*"
+          - Effect: Allow
+            Principal:
+              AWS: !Ref LambdaExecutionRole
+            Action:
+              - kms:Encrypt
+            Resource: "*"
+      KeySpec: SYMMETRIC_DEFAULT
+      MultiRegion: false
+      Enabled: true
+      RotationPeriodInDays: 365
+
   LambdaLogGroup:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
@@ -145,8 +183,12 @@ Resources:
     Properties:
       LogGroupName: "/aws/lambda/rvm"
       RetentionInDays: 7
+      KmsKeyId: !Ref LogGroupKmsKey
 
 Outputs:
   RvmPipelineBucket:
     Description: Name of the S3 bucket for RVM pipeline packages
     Value: !Ref RvmPipelineBucket
+  RvmCiCdRole:
+    Description: Role ARN of the CI/CD role
+    Value: !GetAtt RvmCiCdRole.Arn

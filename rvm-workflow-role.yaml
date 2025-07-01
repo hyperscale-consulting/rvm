@@ -10,6 +10,13 @@ Parameters:
 Resources:
   RvmWorkflowRole:
     Type: "AWS::IAM::Role"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: Need to be able to manage all roles
+          - id: W28
+            reason: Static role name so it can be easily referred to in the RVM main role policy
     Properties:
       RoleName: RvmWorkflowRole
       Description: |
