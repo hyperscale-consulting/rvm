@@ -1,8 +1,9 @@
 name: Publish Cloudformation templates
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
   id-token: write # required for requesting the JWT
@@ -25,3 +26,7 @@ jobs:
           aws-region: eu-west-2
       - run: |
           ASSETS_BUCKET=stackset-customcontroltower-cfn-asset-assetsbucket-istfefgfkzgy make publish
+      - uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        with:
+          files: |
+            packaged.yaml
