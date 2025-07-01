@@ -16,5 +16,7 @@ jobs:
       - uses: ruby/setup-ruby@a4effe49ee8ee5b8b5091268c473a4628afb5651 # v1.245.0
         with:
           ruby-version: "3.4"
+      - run: gem install cfn-nag
+      - run: pip install cfn-lint
       - run: pip install ".[dev]"
       - run: make test
