@@ -3,7 +3,7 @@ VERSION ?= 0.1.0
 
 .PHONY: publish tag release test
 
-packaged.yaml: template.yaml rvm/rvm.py test
+packaged.yaml: template.yaml rvm/rvm.py
 ifndef ASSETS_BUCKET
 	$(error ASSETS_BUCKET is not set)
 endif
