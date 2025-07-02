@@ -74,13 +74,14 @@ Resources:
         rules_to_suppress:
           - id: W89
             reason: No need for VPC access
+          - id: W92
+            reason: "This use case does not need to set the ReservedConcurrentExecutions"
     Properties:
       Runtime: python3.12
       Handler: rvm.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 900
       MemorySize: 512
-      ReservedConcurrentExecutions: 1
       Code: ./rvm
       Architectures:
         - arm64
