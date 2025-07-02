@@ -145,45 +145,18 @@ Resources:
                   - s3:PutObject
                 Resource: !Sub "${RvmPipelineBucket}/rvm-configuration.zip"
 
-  LogGroupKmsKey:
-    Type: AWS::KMS::Key
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
-    Properties:
-      Description: Encrypts the RVM lambda logs
-      EnableKeyRotation: true
-      KeyPolicy:
-        Version: "2012-10-17"
-        Statement:
-          # The following statement is required for KMS key policies to enable IAM policies
-          # set in the owning account to be effective. Without this, admin permissions would
-          # need to be explicitly set here or the key would become unmanageable
-          - Sid: "Enable IAM User Permissions"
-            Effect: Allow
-            Principal:
-              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
-            Action:
-              - kms:*
-            Resource: "*"
-          - Effect: Allow
-            Principal:
-              AWS: !Ref LambdaExecutionRole
-            Action:
-              - kms:Encrypt
-            Resource: "*"
-      KeySpec: SYMMETRIC_DEFAULT
-      MultiRegion: false
-      Enabled: true
-      RotationPeriodInDays: 365
-
   LambdaLogGroup:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Type: AWS::Logs::LogGroup
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W84
+            reason: No sensitive data logged
     Properties:
       LogGroupName: "/aws/lambda/rvm"
       RetentionInDays: 7
-      KmsKeyId: !Ref LogGroupKmsKey
 
 Outputs:
   RvmPipelineBucket:
